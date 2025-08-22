@@ -1,0 +1,18 @@
+<!-- From Uiverse.io by nathann09 -->
+
+<form class="form" (ngSubmit)="onLogin()">
+  <p class="form-title">Sign in to your account</p>
+  <div class="input-container">
+    <input type="text" placeholder="Enter username" [(ngModel)]="username" name="username" required>
+  </div>
+  <div class="input-container">
+    <input type="password" placeholder="Enter password" [(ngModel)]="password" name="password" required>
+  </div>
+  <button type="submit" class="submit">Sign in</button>
+  <p class="signup-link">
+    No account?
+    <button class="link-button" (click)="goToRegister()">Sign up</button>
+  </p>
+  <p style="text-align:center; color:red">{{message}}</p>
+</form>
+
