@@ -1,6 +1,9 @@
 namespace WebApi.Services;
-using WebApi.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using WebApi.Data;
 using WebApi.Entities;
+using WebApi.Models;
 
 public interface IUserService
 {
@@ -14,84 +17,75 @@ public interface IUserService
 
 public class UserService : IUserService
 {
-    // users hardcoded for simplicity, store in a db with hashed passwords in production applications
-    private readonly List<User> _users = new();
+    private readonly AppDbContext _db;
+    private readonly PasswordHasher<User> _hasher;
 
+    public UserService(AppDbContext db, PasswordHasher<User> hasher)
+    {
+        _db = db;
+        _hasher = hasher;
+    }
 
     public async Task<User> Authenticate(AuthenticateModel model)
     {
-        // wrapped in "await Task.Run" to mimic fetching user from a db
-        var user = _users.SingleOrDefault(x =>
-            x.Username == model.Username && x.Password == model.Password);
+        var user = await _db.Users.SingleOrDefaultAsync(u => u.Username == model.Username);
+        if (user == null) return null;
 
-        if (user == null)
-            throw new Exception("Неверный логин или пароль");
-
-        return await Task.FromResult(user);
+        var res = _hasher.VerifyHashedPassword(user, user.PasswordHash, model.Password);
+        return res == PasswordVerificationResult.Success ? user : null;
     }
 
     public async Task<IEnumerable<User>> GetAll()
     {
-        // wrapped in "await Task.Run" to mimic fetching users from a db
-        return await Task.Run(() => _users);
-    }
-    public User GetById(int id)
-    {
-        var user = _users.FirstOrDefault(x => x.Id == id);
-        if (user == null) throw new Exception("Пользователь не найден");
-        return user;
+        return await _db.Users
+            .AsNoTracking()
+            .Select(u => new User { Id = u.Id, FirstName = u.FirstName, LastName = u.LastName, Username = u.Username })
+            .ToListAsync();
     }
 
     public async Task<User> Create(CreateUserModel model)
     {
-        if (_users.Any(x => x.Username == model.Username))
-            throw new Exception("Пользователь с таким логином уже существует");
+        if (await _db.Users.AnyAsync(x => x.Username == model.Username))
+            throw new Exception("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРёРј Р»РѕРіРёРЅРѕРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚");
 
         var user = new User
         {
-            Id = _users.Count + 1,
             FirstName = model.FirstName,
             LastName = model.LastName,
-            Username = model.Username,
-            Password = model.Password
+            Username = model.Username
         };
 
-        _users.Add(user);
+        user.PasswordHash = _hasher.HashPassword(user, model.Password);
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
 
-        return await Task.FromResult(user);
-
-
+        user.PasswordHash = string.Empty;
+        return user;
     }
+
     public async Task<User> Update(int id, UpdateUserModel model)
     {
-        var user = GetById(id);
-
-        if (user == null)
-            return null;
-
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return null;
 
         user.FirstName = model.FirstName;
         user.LastName = model.LastName;
         user.Username = model.Username;
         if (!string.IsNullOrEmpty(model.Password))
-            user.Password = model.Password;
+            user.PasswordHash = _hasher.HashPassword(user, model.Password);
 
-
-        return await Task.FromResult(user);
+        await _db.SaveChangesAsync();
+        user.PasswordHash = string.Empty;
+        return user;
     }
 
     public async Task<User> Delete(int id)
     {
-        var user = GetById(id);
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return null;
 
-        if (user == null)
-            return null;
-
-        _users.Remove(user);
-
-        return await Task.FromResult(user);
-
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync();
+        return user;
     }
-
-
 }
