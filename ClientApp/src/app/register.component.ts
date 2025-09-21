@@ -17,17 +17,46 @@ export class RegisterComponent {
   username = '';
   password = '';
   message = '';
+  loading = false;
 
   constructor(private authService: AuthService, private router: Router) { }
 
-  onRegister() {
+  onRegister(form: any) {
+    if (!form || form.invalid) {
+      this.message = 'Заполните все поля корректно';
+      return;
+    }
+
+    this.loading = true;
+    this.message = '';
+
     this.authService.register(this.firstName, this.lastName, this.username, this.password).subscribe({
-      next: (res) => {
-        this.message = '✅ Регистрация прошла успешно';
-        this.router.navigate(['/login']);
+      next: (res: any) => {
+        // Регистрация успешна. Попробуем сразу залогинить пользователя для удобства.
+        this.authService.login(this.username, this.password).subscribe({
+          next: (loginRes: any) => {
+            if (loginRes && loginRes.token) {
+              this.authService.saveToken(loginRes.token);
+              localStorage.setItem('user', JSON.stringify({ id: loginRes.id, username: loginRes.username }));
+              this.message = '✅ Регистрация и вход прошли успешно';
+              this.router.navigate(['/']);
+            } else {
+              this.message = '✅ Регистрация прошла успешно. Войдите, пожалуйста.';
+              this.router.navigate(['/login']);
+            }
+            this.loading = false;
+          },
+          error: (loginErr) => {
+            // регистрация успешна, но автологин не прошёл — отправим на страницу входа
+            this.loading = false;
+            this.message = '✅ Регистрация успешна. Пожалуйста, войдите.';
+            this.router.navigate(['/login']);
+          }
+        });
       },
       error: (err) => {
-        this.message = err.error?.message || '❌ Ошибка регистрации';
+        this.loading = false;
+        this.message = err?.error?.message || '❌ Ошибка регистрации';
       }
     });
   }
